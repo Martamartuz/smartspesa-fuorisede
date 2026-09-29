@@ -10,8 +10,6 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 # Connessione a Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -80,7 +78,7 @@ elif scelta == "Aggiungi Ricetta alla Casa":
         nuova_categoria = st.selectbox("Categoria", ["Primo", "Secondo", "Piatto Unico", "Contorno"])
         
         submit = st.form_submit_button("Salva nel Ricettario Cloud")
-        if submit and nuovo_titolo and nouveaux_ingredienti if 'nouveaux_ingredienti' in locals() else nuovo_titolo:
+        if submit and nuovo_titolo and nuovi_ingredienti:
             try:
                 # Salvataggio diretto nel database online di Supabase
                 supabase.table("ricette").insert({
@@ -101,4 +99,3 @@ elif scelta == "Vedi Ricettario":
                 st.write(f"**Ingredienti:** {r['ingredienti']}")
     else:
         st.info("Il ricettario è ancora vuoto. Aggiungi la prima ricetta dalla sezione dedicata!")
-            st.write(f"**Ingredienti:** {r['ingredienti']}")
