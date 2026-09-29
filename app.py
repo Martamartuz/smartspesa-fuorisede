@@ -23,7 +23,7 @@ def carica_ricette_da_db():
 
 st.set_page_config(page_title="SmartSpesa Fuorisede", page_icon="🥑", layout="wide")
 
-st.title("🥑 SmartSpesa Fuorisede - Edizione Cloud")
+st.title("🥑 SmartSpesa Fuorisede")
 st.write("Il pianificatore di pasti intelligente con ricettario condiviso nel cloud per le coinquiline!")
 
 # Carichiamo le ricette dal database online
