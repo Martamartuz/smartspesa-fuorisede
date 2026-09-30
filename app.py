@@ -21,10 +21,10 @@ if "user" not in st.session_state:
 
 if not st.session_state.user:
     st.title("🥑 SmartSpesa Fuorisede - Accedi")
-    st.write("Accedi con la tua email per gestire il tuo frigo, le tue ricette e i preferiti!")
+    st.write("Accedi con la tua email per gestire il tuo frigo, i preferiti e il ricettario comune!")
     
     with st.form("form_login"):
-        email_input = st.text_input("La tua email")
+        email_input = st.text_input(" La tua email")
         password_input = st.text_input("Password", type="password")
         col1, col2 = st.columns(2)
         
@@ -63,7 +63,7 @@ scelta = st.sidebar.selectbox("Navigazione", [
     "🤖 Genera Menù Intelligente"
 ])
 
-# Funzioni di caricamento dati
+# Funzioni di caricamento dati globali e personali
 def carica_ricette():
     try:
         return supabase.table("ricette").select("*").execute().data
@@ -89,7 +89,7 @@ def carica_preferiti(email):
 
 if scelta == "📦 Il mio Frigo / Freezer":
     st.header("📦 Cosa hai in Frigo e in Freezer?")
-    st.write("Registra quello che hai in casa o rimuovi ciò che hai terminato per evitare sprechi.")
+    st.write("Registra quello che hai in casa o rimuovi ciò che hai consumato per evitare sprechi.")
     
     with st.form("form_frigo"):
         ingrediente = st.text_input("Nome ingrediente (es. Mozzarella, Petto di pollo, Zucchine)")
@@ -131,8 +131,8 @@ if scelta == "📦 Il mio Frigo / Freezer":
         st.info("Il tuo frigo è vuoto al momento.")
 
 elif scelta == "📖 Ricettario Comune":
-    st.header("📖 Ricettario della Casa")
-    st.write("Sfoglia i piatti della casa e aggiungi quelli che preferisci alla tua lista personale!")
+    st.header("📖 Ricettario Comune della Casa")
+    st.write("Qui trovi tutte le ricette caricate da te e dalle tue amiche. Sfoglia e salva le tue preferite!")
     ricette = carica_ricette()
     preferiti_attuali = [r['id'] for r in carica_preferiti(st.session_state.user)]
     
@@ -156,7 +156,7 @@ elif scelta == "📖 Ricettario Comune":
                         st.success("Aggiunta ai preferiti!")
                         st.rerun()
     else:
-        st.info("Nessuna ricetta nel database.")
+        st.info("Nessuna ricetta nel database comune. Aggiungine una!")
 
 elif scelta == "⭐ I miei Preferiti":
     st.header("⭐ Le tue Ricette Preferite")
@@ -185,13 +185,13 @@ elif scelta == "🍳 Aggiungi Ricetta":
                     "ingredienti": ingredienti_ricetta,
                     "categoria": categoria
                 }).execute()
-                st.success(f"Evviva! La ricetta '{titolo}' è stata salvata nel cloud per tutte le coinquiline!")
+                st.success(f"Evviva! La ricetta '{titolo}' è stata salvata nel ricettario comune per tutte!")
             except Exception as e:
                 st.error(f"Errore durante il salvataggio della ricetta: {e}")
 
 elif scelta == "🤖 Genera Menù Intelligente":
     st.header("🤖 Pianificatore di Pasti Intelligente")
-    st.write("L'IA analizzerà il tuo frigo personale e selezionerà le ricette migliori per creare il piano e la lista della spesa di ciò che manca.")
+    st.write("L'IA analizzerà il tuo frigo personale e selezionerà le ricette dal ricettario comune per creare il piano e la lista della spesa di ciò che manca.")
     
     giorni = st.slider("Giorni di pianificazione", 1, 7, 5)
     
@@ -213,7 +213,7 @@ elif scelta == "🤖 Genera Menù Intelligente":
                 Crea un piano di {giorni} giorni utilizzando prioritariamente QUESTI INGREDIENTI PRESENTI NEL FRIGO DELL'UTENTE:
                 {elenco_frigo_str}
                 
-                Le ricette devono essere scelte o ispirate da QUESTO RICETTARIO DELLA CASA:
+                Le ricette devono essere scelte o ispirate da QUESTO RICETTARIO COMUNE:
                 {elenco_ricette_str}
                 
                 Genera:
