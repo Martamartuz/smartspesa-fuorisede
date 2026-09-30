@@ -13,89 +13,160 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 # Connessione a Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def carica_ricette_da_db():
-    try:
-        response = supabase.table("ricette").select("*").execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Errore di connessione al database: {e}")
-        return []
-
 st.set_page_config(page_title="SmartSpesa Fuorisede", page_icon="🥑", layout="wide")
 
-st.title("🥑 SmartSpesa Fuorisede")
-st.write("Il pianificatore di pasti intelligente con ricettario condiviso nel cloud per le coinquiline!")
+# --- GESTIONE ACCOUNT SEMPLIFICATA ---
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-# Carichiamo le ricette dal database online
-ricette_salvate = carica_ricette_da_db()
-
-# Menu laterale per scegliere cosa fare
-scelta = st.sidebar.selectbox("Navigazione", ["Genera Menù", "Aggiungi Ricetta alla Casa", "Vedi Ricettario"])
-
-if scelta == "Genera Menù":
-    st.header("Pianifica i pasti della settimana")
+if not st.session_state.user:
+    st.title("🥑 SmartSpesa Fuorisede - Accedi")
+    st.write("Accedi con la tua email per gestire il tuo frigo e le tue ricette personali!")
     
-    giorni = st.slider("Per quanti giorni devo pianificare?", 1, 7, 5)
-    ingredienti = st.text_input("Quali ingredienti hai già in frigo da consumare urgentemente?")
-    budget = st.selectbox("Qual è il tuo budget?", ["Molto Economico", "Medio", "Senza limiti"])
-    
-    # Prepariamo l'elenco delle ricette dal database
-    if ricette_salvate:
-        elenco_testo_ricette = "\n".join([f"- {r['titolo']} (Ingredienti: {r['ingredienti']})" for r in ricette_salvate])
-    else:
-        elenco_testo_ricette = "Nessuna ricetta salvata al momento."
-
-    if st.button("Genera Menù e Lista della Spesa"):
-        if not ingredienti:
-            st.warning("Inserisci almeno un ingrediente per evitare sprechi!")
-        else:
-            st.info("Elaborazione del menù in corso...")
-            
-            prompt = f"""
-            Sei il software di gestione pasti per un appartamento di studentesse fuorisede.
-            Crea un menù di {giorni} giorni basandoti principalmente su QUESTO RICETTARIO DELLA CASA:
-            {elenco_testo_ricette}
-            
-            Devi assolutamente dare priorità e inserire nel menù i piatti del ricettario che usano questi ingredienti in scadenza: {ingredienti}.
-            Budget: {budget}.
-            
-            Restituisci ESATTAMENTE:
-            1. Tabella Markdown con il menù (Giorno, Pranzo, Cena).
-            2. Lista della spesa con caselle di controllo divisa per reparti.
-            """
-            
-            try:
-                response = model.generate_content(prompt)
-                st.markdown(response.text)
-            except Exception as e:
-                st.error(f"Errore tecnico o limite di quota raggiunto. Riprova tra poco: {e}")
-
-elif scelta == "Aggiungi Ricetta alla Casa":
-    st.header("Aggiungi una nuova ricetta al ricettario comune 🍳")
-    with st.form("form_ricetta"):
-        nuovo_titolo = st.text_input("Nome del piatto (es. Pasta tonno e limone)")
-        nuovi_ingredienti = st.text_area("Ingredienti principali (separati da virgola)")
-        nuova_categoria = st.selectbox("Categoria", ["Primo", "Secondo", "Piatto Unico", "Contorno"])
+    with st.form("form_login"):
+        email_input = st.text_input("La tua email")
+        password_input = st.text_input("Password", type="password")
+        col1, col2 = st.columns(2)
         
-        submit = st.form_submit_button("Salva nel Ricettario Cloud")
-        if submit and nuovo_titolo and nuovi_ingredienti:
+        btn_login = col1.form_submit_button("Accedi")
+        btn_signup = col2.form_submit_button("Registrati")
+        
+        if btn_signup and email_input and password_input:
             try:
-                # Salvataggio diretto nel database online di Supabase
-                supabase.table("ricette").insert({
-                    "titolo": nuovo_titolo,
-                    "ingredienti": nuovi_ingredienti,
-                    "categoria": nuova_categoria
-                }).execute()
-                st.success(f"Evviva! '{nuovo_titolo}' è stata salvata per sempre nel cloud per tutte le coinquiline!")
+                response = supabase.auth.sign_up({"email": email_input, "password": password_input})
+                st.success("Registrazione completata! Ora puoi effettuare l'accesso.")
             except Exception as e:
-                st.error(f"Errore durante il salvataggio: {e}")
+                st.error(f"Errore nella registrazione: {e}")
+                
+        if btn_login and email_input and password_input:
+            try:
+                response = supabase.auth.sign_in_with_password({"email": email_input, "password": password_input})
+                st.session_state.user = response.user.email
+                st.rerun()
+            except Exception as e:
+                st.error(f"Credenziali non valide o errore di login: {e}")
+    st.stop()
 
-elif scelta == "Vedi Ricettario":
-    st.header("📖 Il Ricettario della Casa (Cloud)")
-    st.write("Ecco tutti i piatti salvati da te e dalle tue coinquiline in tempo reale:")
-    if ricette_salvate:
-        for i, r in enumerate(ricette_salvate):
-            with st.expander(f"{i+1}. {r['titolo']} ({r['categoria']})"):
+# --- APP PRINCIPALE (Se l'utente è loggato) ---
+st.sidebar.write(👤 Benvenuta, **{st.session_state.user}**!)
+if st.sidebar.button("Esci (Logout)"):
+    st.session_state.user = None
+    st.rerun()
+
+st.title("🥑 SmartSpesa Fuorisede - Workspace")
+
+scelta = st.sidebar.selectbox("Navigazione", [
+    "📦 Il mio Frigo / Freezer", 
+    "📖 Ricettario Comune", 
+    "aggiungi Ricetta", 
+    "🍳 Genera Menù Intelligente"
+])
+
+# Funzioni di caricamento dati
+def carica_ricette():
+    try:
+        return supabase.table("ricette").select("*").execute().data
+    except:
+        return []
+
+def carica_frigo(email):
+    try:
+        return supabase.table("inventario_frigo").select("*").eq("user_email", email).execute().data
+    except:
+        return []
+
+if scelta == "📦 Il mio Frigo / Freezer":
+    st.header("📦 Cosa hai in Frigo e in Freezer?")
+    st.write("Registra quello che hai in casa per permettere all'IA di sfruttarlo ed evitare sprechi.")
+    
+    with st.form("form_frigo"):
+        ingrediente = st.text_input("Nome ingrediente (es. Mozzarella, Petto di pollo, Zucchine)")
+        quantita = st.text_input("Quantità (es. 2 confezioni, 500g)")
+        scadenza = st.date_input("Data di scadenza")
+        
+        submitted = st.form_submit_button("Aggiungi al Frigo")
+        if submitted and ingrediente:
+            try:
+                supabase.table("inventario_frigo").insert({
+                    "user_email": st.session_state.user,
+                    "ingrediente": ingrediente,
+                    "quantita": quantita,
+                    "scadenza": str(scadenza)
+                }).execute()
+                st.success(f"'{ingrediente}' aggiunto con successo al tuo inventario!")
+            except Exception as e:
+                st.error(f"Errore nel salvataggio: {e}")
+                
+    st.subheader("I tuoi alimenti registrati:")
+    oggetti_frigo = carica_frigo(st.session_state.user)
+    if oggetti_frigo:
+        for item in oggetti_frigo:
+            col_a, col_b, col_c = st.columns(3)
+            col_a.write(f"🔹 **{item['ingrediente']}**")
+            col_b.write(f"Quantità: {item['quantita']}")
+            col_c.write(f"Scadenza: {item['scadenza']}")
+    else:
+        st.info("Il tuo frigo è vuoto al momento.")
+
+elif scelta == "📖 Ricettario Comune":
+    st.header("📖 Ricettario della Casa")
+    ricette = carica_ricette()
+    if ricette:
+        for r in ricette:
+            with st.expander(f"{r['titolo']} ({r['categoria']})"):
                 st.write(f"**Ingredienti:** {r['ingredienti']}")
     else:
-        st.info("Il ricettario è ancora vuoto. Aggiungi la prima ricetta dalla sezione dedicata!")
+        st.info("Nessuna ricetta nel database.")
+
+elif scelta == "aggiungi Ricetta":
+    st.header("🍳 Aggiungi una nuova ricetta")
+    with st.form("form_nuova_ricetta"):
+        titolo = st.text_input("Titolo della ricetta")
+        ingredienti_ricetta = st.text_area("Ingredienti (separati da virgola)")
+        categoria = st.selectbox("Categoria", ["Primo", "Secondo", "Piatto Unico", "Contorno"])
+        
+        if st.form_submit_button("Salva Ricetta nel Cloud") and titolo:
+            supabase.table("ricette").insert({
+                "titolo": titolo,
+                "ingredienti": ingredienti_ricetta,
+                "categoria": categoria
+            }).execute()
+            st.success("Ricetta aggiunta al ricettario comune!")
+
+elif scelta == "🍳 Genera Menù Intelligente":
+    st.header("🤖 Pianificatore di Pasti Intelligente")
+    st.write("L'IA analizzerà il tuo frigo personale e selezionerà le ricette migliori per creare il piano e la lista della spesa di ciò che manca.")
+    
+    giorni = st.slider("Giorni di pianificazione", 1, 7, 5)
+    
+    # Preleviamo gli ingredienti dal frigo dell'utente
+    frigo_utente = carica_frigo(st.session_state.user)
+    ricette_comuni = carica_ricette()
+    
+    elenco_frigo_str = ", ".join([f"{item['ingrediente']} ({item['quantita']}, scade il {item['scadenza']})" for item in frigo_utente]) if frigo_utente else "Nessun ingrediente registrato."
+    elenco_ricette_str = "\n".join([f"- {r['titolo']} (Ingredienti: {r['ingredienti']})" for r in ricette_comuni]) if ricette_comuni else "Nessuna ricetta."
+    
+    st.write(f"📌 **Stai cucinando usando dal tuo frigo:** {elenco_frigo_str}")
+    
+    if st.button("Crea Menù e Lista della Spesa Mancante"):
+        if not frigo_utente:
+            st.warning("Prima di generare il menù, inserisci almeno un ingrediente nella sezione 'Il mio Frigo / Freezer'!")
+        else:
+            with st.spinner("Sto elaborando il menù perfetto per evitare sprechi..."):
+                prompt = f"""
+                Sei il sistema intelligente di SmartSpesa Fuorisede.
+                Crea un piano di {giorni} giorni utilizzando prioritariamente QUESTI INGREDIENTI PRESENTI NEL FRIGO DELL'UTENTE:
+                {elenco_frigo_str}
+                
+                Le ricette devono essere scelte o ispirate da QUESTO RICETTARIO DELLA CASA:
+                {elenco_ricette_str}
+                
+                Genera:
+                1. Una tabella con il menù settimanale (Giorno, Pranzo, Cena).
+                2. Una lista della spesa intelligente che elenchi SOLO gli ingredienti che MANCANO rispetto a quelli che l'utente ha già nel frigo per preparare questi piatti.
+                """
+                try:
+                    risposta = model.generate_content(prompt)
+                    st.markdown(risposta.text)
+                except Exception as e:
+                    st.error(f"Errore nella generazione con l'IA: {e}")
