@@ -8,23 +8,25 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-3.8-flash')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Connessione a Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="SmartSpesa Fuorisede", page_icon="🥑", layout="wide")
 
-# --- GESTIONE ACCOUNT SEMPLIFICATA ---
+# --- GESTIONE ACCOUNT E GRUPPO ---
 if "user" not in st.session_state:
     st.session_state.user = None
+if "gruppo" not in st.session_state:
+    st.session_state.gruppo = "Appartamento Principale"
 
 if not st.session_state.user:
     st.title("🥑 SmartSpesa Fuorisede - Accedi")
     st.write("Accedi con la tua email per gestire il tuo frigo, i preferiti e il ricettario comune!")
     
     with st.form("form_login"):
-        email_input = st.text_input(" La tua email")
+        email_input = st.text_input("La tua email")
         password_input = st.text_input("Password", type="password")
         col1, col2 = st.columns(2)
         
@@ -42,6 +44,15 @@ if not st.session_state.user:
             try:
                 response = supabase.auth.sign_in_with_password({"email": email_input, "password": password_input})
                 st.session_state.user = response.user.email
+                
+                # Carichiamo il gruppo dell'utente se esiste
+                profilo = supabase.table("profili_utenti").select("nome_gruppo").eq("user_email", st.session_state.user).execute()
+                if profilo.data:
+                    st.session_state.gruppo = profilo.data[0]["nome_gruppo"]
+                else:
+                    supabase.table("profili_utenti").insert({"user_email": st.session_state.user, "nome_gruppo": "Appartamento Principale"}).execute()
+                    st.session_state.gruppo = "Appartamento Principale"
+                    
                 st.rerun()
             except Exception as e:
                 st.error(f"Credenziali non valide o errore di login: {e}")
@@ -49,11 +60,30 @@ if not st.session_state.user:
 
 # --- APP PRINCIPALE (Se l'utente è loggato) ---
 st.sidebar.write(f"👤 Benvenuta, **{st.session_state.user}**!")
+
+# Sezione Gruppo nella barra laterale
+st.sidebar.markdown("---")
+st.sidebar.subheader("🏠 Il tuo Gruppo / Casa")
+gruppo_input = st.sidebar.text_input("Nome Appartamento / Gruppo", value=st.session_state.gruppo)
+if st.sidebar.button("Salva Nome Gruppo"):
+    try:
+        supabase.table("profili_utenti").upsert({
+            "user_email": st.session_state.user,
+            "nome_gruppo": gruppo_input
+        }).execute()
+        st.session_state.gruppo = gruppo_input
+        st.success(f"Gruppo aggiornato a: {gruppo_input}")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Errore aggiornamento gruppo: {e}")
+
+st.sidebar.markdown("---")
 if st.sidebar.button("Esci (Logout)"):
     st.session_state.user = None
+    st.session_state.gruppo = "Appartamento Principale"
     st.rerun()
 
-st.title("🥑 SmartSpesa Fuorisede - Workspace")
+st.title(f"🥑 SmartSpesa Fuorisede - Gruppo: {st.session_state.gruppo}")
 
 scelta = st.sidebar.selectbox("Navigazione", [
     "📦 Il mio Frigo / Freezer", 
@@ -63,7 +93,7 @@ scelta = st.sidebar.selectbox("Navigazione", [
     "🤖 Genera Menù Intelligente"
 ])
 
-# Funzioni di caricamento dati globali e personali
+# Funzioni di caricamento dati
 def carica_ricette():
     try:
         return supabase.table("ricette").select("*").execute().data
@@ -119,7 +149,6 @@ if scelta == "📦 Il mio Frigo / Freezer":
             col_b.write(f"Qt: {item['quantita']}")
             col_c.write(f"Scad: {item['scadenza']}")
             
-            # Pulsante per rimuovere l'ingrediente dal frigo
             if col_d.button("🗑️", key=f"del_frigo_{item['id']}"):
                 try:
                     supabase.table("inventario_frigo").delete().eq("id", item['id']).execute()
@@ -132,7 +161,7 @@ if scelta == "📦 Il mio Frigo / Freezer":
 
 elif scelta == "📖 Ricettario Comune":
     st.header("📖 Ricettario Comune della Casa")
-    st.write("Qui trovi tutte le ricette caricate da te e dalle tue amiche. Sfoglia e salva le tue preferite!")
+    st.write("Qui trovi tutte le ricette caricate da te, dalle tue coinquiline e dagli amici. Sfoglia e salva le tue preferite!")
     ricette = carica_ricette()
     preferiti_attuali = [r['id'] for r in carica_preferiti(st.session_state.user)]
     
@@ -185,7 +214,7 @@ elif scelta == "🍳 Aggiungi Ricetta":
                     "ingredienti": ingredienti_ricetta,
                     "categoria": categoria
                 }).execute()
-                st.success(f"Evviva! La ricetta '{titolo}' è stata salvata nel ricettario comune per tutte!")
+                st.success(f"Evviva! La ricetta '{titolo}' è stata salvata nel ricettario comune per tutti!")
             except Exception as e:
                 st.error(f"Errore durante il salvataggio della ricetta: {e}")
 
