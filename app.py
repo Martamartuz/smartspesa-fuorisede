@@ -21,7 +21,7 @@ if "user" not in st.session_state:
 
 if not st.session_state.user:
     st.title("🥑 SmartSpesa Fuorisede - Accedi")
-    st.write("Accedi con la tua email per gestire il tuo frigo e le tue ricette personali!")
+    st.write("Accedi con la tua email per gestire il tuo frigo, le tue ricette e i preferiti!")
     
     with st.form("form_login"):
         email_input = st.text_input("La tua email")
@@ -34,7 +34,7 @@ if not st.session_state.user:
         if btn_signup and email_input and password_input:
             try:
                 response = supabase.auth.sign_up({"email": email_input, "password": password_input})
-                st.success("Registrazione completata! Ora puoi effettuare l'accesso (ricordati di confermare l'utente se richiesto su Supabase).")
+                st.success("Registrazione completata! Ora puoi effettuare l'accesso.")
             except Exception as e:
                 st.error(f"Errore nella registrazione: {e}")
                 
@@ -58,6 +58,7 @@ st.title("🥑 SmartSpesa Fuorisede - Workspace")
 scelta = st.sidebar.selectbox("Navigazione", [
     "📦 Il mio Frigo / Freezer", 
     "📖 Ricettario Comune", 
+    "⭐ I miei Preferiti",
     "🍳 Aggiungi Ricetta", 
     "🤖 Genera Menù Intelligente"
 ])
@@ -72,6 +73,18 @@ def carica_ricette():
 def carica_frigo(email):
     try:
         return supabase.table("inventario_frigo").select("*").eq("user_email", email).execute().data
+    except:
+        return []
+
+def carica_preferiti(email):
+    try:
+        res = supabase.table("preferiti_utenti").select("ricetta_id").eq("user_email", email).execute()
+        ids = [item["ricetta_id"] for item in res.data]
+        if not ids:
+            return []
+        # Preleviamo i dettagli delle ricette salvate tra i preferiti
+        ricette_fav = supabase.table("ricette").select("*").in_("id", ids).execute()
+        return ricette_fav.data
     except:
         return []
 
@@ -110,13 +123,43 @@ if scelta == "📦 Il mio Frigo / Freezer":
 
 elif scelta == "📖 Ricettario Comune":
     st.header("📖 Ricettario della Casa")
+    st.write("Sfoglia i piatti della casa e aggiungi quelli che preferisci alla tua lista personale!")
     ricette = carica_ricette()
+    preferiti_attuali = [r['id'] for r in carica_preferiti(st.session_state.user)]
+    
     if ricette:
         for r in ricette:
             with st.expander(f"{r['titolo']} ({r['categoria']})"):
                 st.write(f"**Ingredienti:** {r['ingredienti']}")
+                
+                is_fav = r['id'] in preferiti_attuali
+                if is_fav:
+                    if st.button("❌ Rimuovi dai Preferiti", key=f"rem_{r['id']}"):
+                        supabase.table("preferiti_utenti").delete().eq("user_email", st.session_state.user).eq("ricetta_id", r['id']).execute()
+                        st.success("Rimossa dai preferiti!")
+                        st.rerun()
+                else:
+                    if st.button("⭐ Aggiungi ai Preferiti", key=f"add_{r['id']}"):
+                        supabase.table("preferiti_utenti").insert({
+                            "user_email": st.session_state.user,
+                            "ricetta_id": r['id']
+                        }).execute()
+                        st.success("Aggiunta ai preferiti!")
+                        st.rerun()
     else:
         st.info("Nessuna ricetta nel database.")
+
+elif scelta == "⭐ I miei Preferiti":
+    st.header("⭐ Le tue Ricette Preferite")
+    st.write("Qui trovi tutti i piatti che hai salvato per consultarli rapidamente quando non sai cosa cucinare.")
+    ricette_fav = carica_preferiti(st.session_state.user)
+    
+    if ricette_fav:
+        for r in ricette_fav:
+            with st.expander(f"{r['titolo']} ({r['categoria']})"):
+                st.write(f"**Ingredienti:** {r['ingredienti']}")
+    else:
+        st.info("Non hai ancora salvato nessuna ricetta tra i preferiti. Vai nel 'Ricettario Comune' per aggiungerne qualcuna!")
 
 elif scelta == "🍳 Aggiungi Ricetta":
     st.header("🍳 Aggiungi una nuova ricetta al ricettario comune")
