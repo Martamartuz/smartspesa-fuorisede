@@ -8,7 +8,7 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-3.8-flash')
 
 # Connessione a Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
