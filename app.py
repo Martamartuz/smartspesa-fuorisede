@@ -34,7 +34,7 @@ if not st.session_state.user:
         if btn_signup and email_input and password_input:
             try:
                 response = supabase.auth.sign_up({"email": email_input, "password": password_input})
-                st.success("Registrazione completata! Ora puoi effettuare l'accesso.")
+                st.success("Registrazione completata! Ora puoi effettuare l'accesso (ricordati di confermare l'utente se richiesto su Supabase).")
             except Exception as e:
                 st.error(f"Errore nella registrazione: {e}")
                 
@@ -58,8 +58,8 @@ st.title("🥑 SmartSpesa Fuorisede - Workspace")
 scelta = st.sidebar.selectbox("Navigazione", [
     "📦 Il mio Frigo / Freezer", 
     "📖 Ricettario Comune", 
-    "aggiungi Ricetta", 
-    "🍳 Genera Menù Intelligente"
+    "🍳 Aggiungi Ricetta", 
+    "🤖 Genera Menù Intelligente"
 ])
 
 # Funzioni di caricamento dati
@@ -118,28 +118,31 @@ elif scelta == "📖 Ricettario Comune":
     else:
         st.info("Nessuna ricetta nel database.")
 
-elif scelta == "aggiungi Ricetta":
-    st.header("🍳 Aggiungi una nuova ricetta")
+elif scelta == "🍳 Aggiungi Ricetta":
+    st.header("🍳 Aggiungi una nuova ricetta al ricettario comune")
     with st.form("form_nuova_ricetta"):
-        titolo = st.text_input("Titolo della ricetta")
-        ingredienti_ricetta = st.text_area("Ingredienti (separati da virgola)")
+        titolo = st.text_input("Titolo della ricetta (es. Pasta alla Norma)")
+        ingredienti_ricetta = st.text_area("Ingredienti principali (separati da virgola)")
         categoria = st.selectbox("Categoria", ["Primo", "Secondo", "Piatto Unico", "Contorno"])
         
-        if st.form_submit_button("Salva Ricetta nel Cloud") and titolo:
-            supabase.table("ricette").insert({
-                "titolo": titolo,
-                "ingredienti": ingredienti_ricetta,
-                "categoria": categoria
-            }).execute()
-            st.success("Ricetta aggiunta al ricettario comune!")
+        submit_ricetta = st.form_submit_button("Salva Ricetta nel Cloud")
+        if submit_ricetta and titolo and ingredienti_ricetta:
+            try:
+                supabase.table("ricette").insert({
+                    "titolo": titolo,
+                    "ingredienti": ingredienti_ricetta,
+                    "categoria": categoria
+                }).execute()
+                st.success(f"Evviva! La ricetta '{titolo}' è stata salvata nel cloud per tutte le coinquiline!")
+            except Exception as e:
+                st.error(f"Errore durante il salvataggio della ricetta: {e}")
 
-elif scelta == "🍳 Genera Menù Intelligente":
+elif scelta == "🤖 Genera Menù Intelligente":
     st.header("🤖 Pianificatore di Pasti Intelligente")
     st.write("L'IA analizzerà il tuo frigo personale e selezionerà le ricette migliori per creare il piano e la lista della spesa di ciò che manca.")
     
     giorni = st.slider("Giorni di pianificazione", 1, 7, 5)
     
-    # Preleviamo gli ingredienti dal frigo dell'utente
     frigo_utente = carica_frigo(st.session_state.user)
     ricette_comuni = carica_ricette()
     
