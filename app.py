@@ -82,7 +82,6 @@ def carica_preferiti(email):
         ids = [item["ricetta_id"] for item in res.data]
         if not ids:
             return []
-        # Preleviamo i dettagli delle ricette salvate tra i preferiti
         ricette_fav = supabase.table("ricette").select("*").in_("id", ids).execute()
         return ricette_fav.data
     except:
@@ -90,7 +89,7 @@ def carica_preferiti(email):
 
 if scelta == "📦 Il mio Frigo / Freezer":
     st.header("📦 Cosa hai in Frigo e in Freezer?")
-    st.write("Registra quello che hai in casa per permettere all'IA di sfruttarlo ed evitare sprechi.")
+    st.write("Registra quello che hai in casa o rimuovi ciò che hai terminato per evitare sprechi.")
     
     with st.form("form_frigo"):
         ingrediente = st.text_input("Nome ingrediente (es. Mozzarella, Petto di pollo, Zucchine)")
@@ -107,6 +106,7 @@ if scelta == "📦 Il mio Frigo / Freezer":
                     "scadenza": str(scadenza)
                 }).execute()
                 st.success(f"'{ingrediente}' aggiunto con successo al tuo inventario!")
+                st.rerun()
             except Exception as e:
                 st.error(f"Errore nel salvataggio: {e}")
                 
@@ -114,10 +114,19 @@ if scelta == "📦 Il mio Frigo / Freezer":
     oggetti_frigo = carica_frigo(st.session_state.user)
     if oggetti_frigo:
         for item in oggetti_frigo:
-            col_a, col_b, col_c = st.columns(3)
+            col_a, col_b, col_c, col_d = st.columns([2, 2, 2, 1])
             col_a.write(f"🔹 **{item['ingrediente']}**")
-            col_b.write(f"Quantità: {item['quantita']}")
-            col_c.write(f"Scadenza: {item['scadenza']}")
+            col_b.write(f"Qt: {item['quantita']}")
+            col_c.write(f"Scad: {item['scadenza']}")
+            
+            # Pulsante per rimuovere l'ingrediente dal frigo
+            if col_d.button("🗑️", key=f"del_frigo_{item['id']}"):
+                try:
+                    supabase.table("inventario_frigo").delete().eq("id", item['id']).execute()
+                    st.success(f"'{item['ingrediente']}' rimosso dal frigo!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore durante l'eliminazione: {e}")
     else:
         st.info("Il tuo frigo è vuoto al momento.")
 
