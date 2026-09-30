@@ -48,7 +48,7 @@ if not st.session_state.user:
     st.stop()
 
 # --- APP PRINCIPALE (Se l'utente è loggato) ---
-st.sidebar.write(👤 Benvenuta, **{st.session_state.user}**!)
+st.sidebar.write(Benvenuta, **{st.session_state.user}**!)
 if st.sidebar.button("Esci (Logout)"):
     st.session_state.user = None
     st.rerun()
