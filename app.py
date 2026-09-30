@@ -23,7 +23,7 @@ if "gruppo" not in st.session_state:
 
 if not st.session_state.user:
     st.title("🥑 SmartSpesa Fuorisede - Accedi")
-    st.write("Accedi con la tua email per gestire il tuo frigo, i preferiti e il ricettario comune!")
+    st.write("Accedi con la tua email per gestire il tuo frigo, i preferiti e la spesa di gruppo!")
     
     with st.form("form_login"):
         email_input = st.text_input("La tua email")
@@ -61,18 +61,17 @@ if not st.session_state.user:
 # --- APP PRINCIPALE (Se l'utente è loggato) ---
 st.sidebar.write(f"👤 Benvenuta, **{st.session_state.user}**!")
 
-# Sezione Gruppo nella barra laterale
 st.sidebar.markdown("---")
 st.sidebar.subheader("🏠 Il tuo Gruppo / Casa")
 gruppo_input = st.sidebar.text_input("Nome Appartamento / Gruppo", value=st.session_state.gruppo)
-if st.sidebar.button("Salva Nome Gruppo"):
+if st.sidebar.button("Cambia / Salva Gruppo"):
     try:
         supabase.table("profili_utenti").upsert({
             "user_email": st.session_state.user,
             "nome_gruppo": gruppo_input
         }).execute()
         st.session_state.gruppo = gruppo_input
-        st.success(f"Gruppo aggiornato a: {gruppo_input}")
+        st.success(f"Ora fai parte del gruppo: {gruppo_input}")
         st.rerun()
     except Exception as e:
         st.error(f"Errore aggiornamento gruppo: {e}")
@@ -83,9 +82,10 @@ if st.sidebar.button("Esci (Logout)"):
     st.session_state.gruppo = "Appartamento Principale"
     st.rerun()
 
-st.title(f"🥑 SmartSpesa Fuorisede - Gruppo: {st.session_state.gruppo}")
+st.title(f"🥑 SmartSpesa - Gruppo: {st.session_state.gruppo}")
 
 scelta = st.sidebar.selectbox("Navigazione", [
+    "🛒 Lista Spesa della Casa",
     "📦 Il mio Frigo / Freezer", 
     "📖 Ricettario Comune", 
     "⭐ I miei Preferiti",
@@ -117,7 +117,53 @@ def carica_preferiti(email):
     except:
         return []
 
-if scelta == "📦 Il mio Frigo / Freezer":
+def carica_spesa_gruppo(gruppo):
+    try:
+        return supabase.table("spesa_gruppo").select("*").eq("nome_gruppo", gruppo).execute().data
+    except:
+        return []
+
+if scelta == "🛒 Lista Spesa della Casa":
+    st.header(f"🛒 Lista della Spesa Condivisa: {st.session_state.gruppo}")
+    st.write("Aggiungi qui le cose che mancano in casa (detersivi, scorte, generi alimentari comuni) così le vostre coinquiline le vedranno in tempo reale.")
+    
+    with st.form("form_spesa_comune"):
+        nuovo_articolo = st.text_input("Cosa serve comprare? (es. Carta igienica, Latte, Olio)")
+        submit_articolo = st.form_submit_button("Aggiungi alla Lista della Spesa")
+        
+        if submit_articolo and nuovo_articolo:
+            try:
+                supabase.table("spesa_gruppo").insert({
+                    "nome_gruppo": st.session_state.gruppo,
+                    "articolo": nuovo_articolo,
+                    "comprato": False,
+                    "aggiunto_da": st.session_state.user
+                }).execute()
+                st.success(f"'{nuovo_articolo}' aggiunto alla spesa della casa!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Errore nel salvataggio: {e}")
+                
+    st.subheader("Articoli da comprare per la casa:")
+    articoli_spesa = carica_spesa_gruppo(st.session_state.gruppo)
+    
+    if articoli_spesa:
+        for item in articoli_spesa:
+            col1, col2, col3 = st.columns([3, 2, 1])
+            col1.write(f"🛒 **{item['articolo']}** (inserito da `{item['aggiunto_da']}`)")
+            
+            # Pulsante per eliminare / spuntare l'articolo comprato
+            if col3.button("Comprato! 🗑️", key=f"del_spesa_{item['id']}"):
+                try:
+                    supabase.table("spesa_gruppo").delete().eq("id", item['id']).execute()
+                    st.success("Articolo rimosso dalla lista!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore: {e}")
+    else:
+        st.info("La lista della spesa della casa è vuota! Tutto sotto controllo.")
+
+elif scelta == "📦 Il mio Frigo / Freezer":
     st.header("📦 Cosa hai in Frigo e in Freezer?")
     st.write("Registra quello che hai in casa o rimuovi ciò che hai consumato per evitare sprechi.")
     
